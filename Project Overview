@@ -1,0 +1,161 @@
+Deconstruct Requirements (User Stories)
+
+"As a newsletter author (user), I want to input a batch list of US ZIP codes (100-300) so that I can receive a CSV file containing potential cash-flowing rental properties (1-4 units) filtered by >=8% Cash-on-Cash (CoC) return and positive monthly cash flow."
+
+"As a user, I want to configure the down payment %, interest rate, loan term (years), and default monthly expenses so that the mortgage, cash flow, and CoC calculations use my specific financial assumptions."
+
+"As a user, I want the tool to fetch active listings (single-family, multifamily 2-4 units) from the Zillow API (RapidAPI free tier) for each input ZIP code."
+
+"As a user, I want the tool to fetch estimated average rent by bedroom count for each relevant ZIP code from the RentCast API (Pro Plan)."
+
+"As a user, I want the RentCast API results to be cached locally for 30 days (based on ZIP code and bedroom count) so that redundant API calls are minimized."
+
+"As a user, I want the output CSV to include columns: Address, Price, Beds, Estimated Rent, Estimated Mortgage, Estimated Monthly Cash Flow, Estimated CoC Return, Property Type (Single Family/Multifamily), and Zillow Link."
+
+Step 2: Visualize Complex Logic & Flow (Flowchart Outline)
+
+Start
+
+Input: Get list of ZIP codes (paste/upload).
+
+Input: Get/Confirm Configurable Settings (Down Payment %, Rate, Term, Expenses).
+
+Initialize: Empty results list, Load RentCast cache (if exists).
+
+Loop: For each ZIP code in list:
+
+API Call (Zillow): Get active listings (1-4 units) for ZIP. Handle API errors/limits.
+
+Loop: For each Listing:
+
+Filter: Is homeType "SingleFamily" or "MultiFamily"? If no, continue to next listing.
+
+Extract: Get Price, Beds, Address, Link.
+
+Determine Property Type: "Single Family" or "Multifamily".
+
+Cache Check: Is (ZIP, Beds) in RentCast cache and < 30 days old?
+
+Yes: Get Rent from cache.
+
+No:
+
+API Call (RentCast): Get average rent for ZIP/Beds. Handle API errors/limits.
+
+If Success: Store Rent in cache with timestamp.
+
+If Fail/No Data: Log warning, set Rent to N/A/0, continue to next listing.
+
+Calculate:
+
+Mortgage Payment (using config settings, price).
+
+Total Expenses (using config setting or default).
+
+Monthly Cash Flow (Rent - Mortgage - Expenses).
+
+Total Cash Invested (Price * Down Payment %).
+
+Annual Cash Flow (Monthly Cash Flow * 12).
+
+CoC Return ((Annual Cash Flow / Total Cash Invested) * 100).
+
+Filter: Is CoC >= 8% AND Monthly Cash Flow >= $200 (or configured minimum)?
+
+Yes: Append {Address, Price, Beds, Rent, Mortgage, Cash Flow, CoC, Type, Link} to results list.
+
+Output: Generate CSV file from results list.
+
+Save Cache: Persist updated RentCast cache.
+
+End
+
+Step 3: Identify Potential Pitfalls (Checklist)
+
+API Limits: Zillow free tier (500/mo), RentCast Pro (1000/mo). Need careful handling, especially with batch ZIPs. Caching is crucial. Add delays between calls?
+
+API Errors: Network issues, invalid API keys, unexpected response formats from Zillow/RentCast. Need robust try-except blocks and logging.
+
+Data Inconsistencies: Zillow homeType might be missing or inconsistent. RentCast might not have data for all ZIP/bedroom combinations. Need graceful handling (skip, log, default values?).
+
+Calculation Accuracy: Ensure mortgage calculation formula is correct. Handle potential division-by-zero if cash invested is zero. Floating-point precision issues?
+
+Scalability: Processing 300 ZIPs could take time and hit limits. Consider processing in smaller batches or adding progress indicators.
+
+Caching Logic: Ensure cache keys are correct, timestamp checking works, cache is saved/loaded properly.
+
+Step 4: Define Data Structures
+
+CSV Output: Columns as specified in RFP: Address, Price, Beds, Estimated Rent, Estimated Mortgage, Estimated Monthly Cash Flow, Estimated CoC Return, Property Type, Zillow Link.
+
+Config Settings: Dictionary or simple object: { 'down_payment_percent': 0.20, 'interest_rate_decimal': 0.07, 'loan_term_years': 30, 'monthly_expenses': 300.0 }
+
+RentCast Cache: Dictionary: cache = { (zip_code, num_beds): (rent_estimate, timestamp), ... }. Needs persistence (e.g., save/load from a JSON file).
+
+Phase 3: Prompt Engineering - Template-Driven Precision
+Goal: Draft a precise prompt for a core part of the tool.
+
+Action: Example Prompt Snippet (Core Calculation Function)
+
+**1. Role & Goal:**
+
+- Act as: Expert Python Developer building real estate investment analysis tools.
+- Overall Project Goal: Create a tool to find cash-flowing rentals from Zillow/RentCast based on user criteria.
+- Current Task Goal: Write a Python function `calculate_investment_metrics` that takes property details and configuration settings, and returns key financial metrics.
+
+**2. Context & Constraints:**
+
+- Key Technologies: Python 3.9+. No external financial libraries needed unless essential for standard mortgage calculation.
+- Function Signature: `calculate_investment_metrics(price, estimated_rent, config)` where `config` is a dictionary containing `down_payment_percent`, `interest_rate_decimal`, `loan_term_years`, `monthly_expenses`.
+- Constraints: Handle potential `None` or non-numeric `estimated_rent`.
+
+**3. Detailed Requirements & Logic:**
+
+- Calculate Loan Amount: `price * (1 - config['down_payment_percent'])`.
+- Calculate Monthly Mortgage Payment: Use the standard mortgage formula: `M = P [ i(1 + i)^n ] / [ (1 + i)^n – 1]`, where P=Loan Amount, i=monthly interest rate (`config['interest_rate_decimal'] / 12`), n=number of payments (`config['loan_term_years'] * 12`). Handle potential division by zero if rate is 0.
+- Calculate Monthly Cash Flow: `estimated_rent - monthly_mortgage - config['monthly_expenses']`. If `estimated_rent` is invalid/None, cash flow should be considered N/A or None.
+- Calculate Total Cash Invested: `price * config['down_payment_percent']`.
+- Calculate Annual Cash Flow: `monthly_cash_flow * 12`.
+- Calculate Cash-on-Cash (CoC) Return %: `(annual_cash_flow / total_cash_invested) * 100`. Handle potential division by zero if `total_cash_invested` is 0. Return 0 or None in this case.
+
+**4. Pitfall Handling:**
+
+- Error Handling: If `estimated_rent` is not a valid number, return `None` for `monthly_cash_flow` and `coc_return`. If `total_cash_invested` is 0, return 0 or `None` for `coc_return`. Use try-except for calculations if necessary.
+- Edge Cases: Handle $0 price (should likely result in 0/None metrics).
+
+**5. Code Requirements:**
+
+- Include comments explaining the mortgage formula and other key calculations.
+- Use clear variable names (`monthly_interest_rate`, `number_of_payments`).
+
+**6. Output Format:**
+
+- Return a dictionary: `{ 'monthly_mortgage': calculated_mortgage, 'monthly_cash_flow': calculated_cash_flow, 'coc_return_percent': calculated_coc }`.
+
+**7. Example (Optional):**
+
+- Input Example: `price=300000`, `estimated_rent=2500`, `config={'down_payment_percent': 0.20, 'interest_rate_decimal': 0.07, 'loan_term_years': 30, 'monthly_expenses': 300}`
+- Expected Output Example (Approximate): Check calculation manually or with an online calculator.
+
+(Self-correction: Need similar prompts for API interaction, caching, main loop, CSV generation etc., breaking the project down based on the flowchart).
+
+Phase 4: AI Build & Review - Incorporating Basic Testing
+Goal: Oversee AI generation and perform structured checks.
+
+Step 1: Execute Prompts: Feed prompts for each module (API calls, calculations, caching, main loop, CSV output) iteratively.
+
+Step 2: Review Output: Check if generated code addresses prompt requirements, has comments, and seems logical. Use "Explain this code" if needed.
+
+Step 3: Define & Execute Basic Test Cases:
+
+TC1 (Core Logic): Input 1 ZIP known to have good deals (e.g., manually verify a property on Zillow/RentCast). Config: Defaults. Expected: CSV contains that property, calculations match manual check.
+
+TC2 (Filtering): Use TC1 input. Config: Set CoC filter to 50%. Expected: CSV is empty or excludes the property from TC1.
+
+TC3 (Config Change): Use TC1 input. Config: Increase interest rate significantly. Expected: Property from TC1 might be excluded due to lower CoC/Cash Flow, calculations in CSV reflect new rate.
+
+TC4 (API Error Handling): (Hard to force) Observe logs/output when running with potentially problematic ZIPs or if API limits are hit. Expected: Tool doesn't crash, logs errors, continues processing other ZIPs.
+
+TC5 (Caching): Input batch of 10 ZIPs. Run once, record time/observe logs (if adding API call logging). Run immediately again with the same 10 ZIPs. Expected: Second run is significantly faster, logs show fewer/no RentCast API calls. Delete cache file, run again. Expected: RentCast API calls occur again.
+
+TC6 (Data Edge Case): Input ZIP where RentCast likely lacks data. Expected: Properties handled gracefully (logged as skipped, N/A in rent field).
